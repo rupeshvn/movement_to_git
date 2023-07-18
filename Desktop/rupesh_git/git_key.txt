@@ -1,1 +1,205 @@
-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
+with eligible_amount as 
+(select bit_reference,value_n as Eligible_amount 
+from fah.activities_bit ab
+join fah.offer_action oa on ab.id=oa.activity_id
+where subject_name='Eligible Amount'
+group by 1,2)
+
+,
+cancelled_bits as (
+select bit_reference,json_extract_path_text(ab.header,'cancel_bit_id') as cancel_bit_id
+from fah.activities_bit ab
+where json_extract_path_text(ab.header,'cancel_bit_id') <> ''
+),
+bit_type_data as (
+select 
+ab.member_id,
+json_extract_path_text(ab.header,'h_original_bit_amount') as h_original_bit_amount,
+json_extract_path_text(ab.header,'H_cashier_name') as H_cashier_name,
+json_extract_path_text(ab.header,'H_POS_CashierID') as H_POS_CashierID,
+json_extract_path_text(ab.header,'h_representative_id') as h_representative_id,
+ab.bit_reference,
+json_extract_path_text(ab.header,'cancel_bit_id') as cancel_bit_id,
+ea.Eligible_amount,
+json_extract_path_text(ssl.extra_data,'antum_location_id') as antum_location_id,
+ab.h_bit_date at time zone 'Asia/RIYADH' as transaction_date,
+json_extract_path_text(ab.header, 'h_bit_source_generated_id') as transaction_id,
+json_extract_path_text(ab.header, 'h_bit_type') as bit_type,
+oa.offer_id,
+ab.payment_details,
+ss.id as sponsor_id,
+ssl.id as location_id,
+ssl.location_code,
+ssl.destination,
+ss.name as sponsor_name,
+ssl.location_name,
+ss.business_division,
+json_extract_path_text(ss.extra_data,'antum_brand_id') as brand_id,
+ssl.address,
+ab.amount as sales,
+oa.type,trim('[]' from oa.reward_tags) as reward_tag,
+abb.bit_reference as original_bit_reference,
+abb.amount as original_bit_amount,
+json_extract_path_text(abb.header, 'h_bit_type') as bit_type_return_part2,
+json_extract_path_text(ab.header,'h_bit_source_original_generated_id') as h_bit_source_original_generated_id,
+'NULL' AS bit_type_return,
+of.offer_name,
+coalesce(ssl.destination,rmr.destination) as Mall_name,
+sum(oa.value_n) as points
+from fah.activities_bit ab
+left join (select activity_id,offer_id,rule_id,subject_name,type,reward_tags,sum(value_n) as value_n 
+      from fah.offer_action
+      where subject_name ='1' 
+      group by 1,2,3,4,5,6) oa on ab.id=oa.activity_id 
+left join fah.sponsors_sponsor ss on ab.h_sponsor_id=ss.id
+left join (select bit_reference,destination from fah.receipts_memberreceipt group by 1,2) rmr on rmr.bit_reference=ab.bit_reference
+left join eligible_amount ea on ab.bit_reference=ea.bit_reference
+left join fah.sponsors_sponsorlocation ssl on ab.h_location=ssl.location_code
+left join fah.offers_offer of on of.id=oa.offer_id
+left join cancelled_bits cb on ab.bit_reference = cb.bit_reference
+left join fah.activities_bit abb on cb.cancel_bit_id = abb.bit_reference
+where ab.status='SUCCESS'
+and json_extract_path_text(ab.header, 'h_bit_type') in ('SPEND','PAYMENT_WITH_POINTS','REVERSAL','PARTIAL_REFUND')
+group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
+),
+member_update as 
+(
+select 
+ab.member_id,
+json_extract_path_text(ab.header,'h_original_bit_amount') as h_original_bit_amount,
+json_extract_path_text(ab.header,'H_cashier_name') as H_cashier_name,
+json_extract_path_text(ab.header,'H_POS_CashierID') as H_POS_CashierID,
+json_extract_path_text(ab.header,'h_representative_id') as h_representative_id,
+ab.bit_reference,
+json_extract_path_text(ab.header,'cancel_bit_id') as cancel_bit_id,
+ea.Eligible_amount,
+json_extract_path_text(ssl.extra_data,'antum_location_id') as antum_location_id,
+ab.h_bit_date at time zone 'Asia/RIYADH' as transaction_date,
+json_extract_path_text(ab.header, 'h_bit_source_generated_id') as transaction_id,
+json_extract_path_text(ab.header, 'h_bit_type') as bit_type,
+oa.offer_id,
+ab.payment_details,
+ss.id as sponsor_id,
+ssl.id as location_id,
+ssl.location_code,
+ssl.destination,
+ss.name as sponsor_name,
+ssl.location_name,
+ss.business_division,
+json_extract_path_text(ss.extra_data,'antum_brand_id') as brand_id,
+ssl.address,
+ab.amount as sales,
+oa.type,trim('[]' from oa.reward_tags) as reward_tag,
+abb.bit_reference as original_bit_reference,
+abb.amount as original_bit_amount,
+json_extract_path_text(abb.header, 'h_bit_type') as bit_type_return_part2,
+json_extract_path_text(ab.header,'h_bit_source_original_generated_id') as h_bit_source_original_generated_id,
+'NULL' AS bit_type_return,
+of.offer_name,
+coalesce(ssl.destination,rmr.destination) as Mall_name,
+sum(oa.value_n) as points
+from fah.activities_bit ab
+join (select activity_id,offer_id,rule_id,subject_name,type,reward_tags,sum(value_n) as value_n 
+      from fah.offer_action
+      where subject_name ='1' 
+      and rule_id ='Reward Members for 100% Profile Completion'
+      group by 1,2,3,4,5,6) oa on ab.id=oa.activity_id and json_extract_path_text(ab.header, 'h_bit_type') in ('MEMBER_UPDATE') 
+left join fah.sponsors_sponsor ss on ab.h_sponsor_id=ss.id
+left join (select bit_reference,destination from fah.receipts_memberreceipt group by 1,2) rmr on rmr.bit_reference=ab.bit_reference
+left join eligible_amount ea on ab.bit_reference=ea.bit_reference
+left join fah.sponsors_sponsorlocation ssl on ab.h_location=ssl.location_code
+left join fah.offers_offer of on of.id=oa.offer_id
+left join cancelled_bits cb on ab.bit_reference = cb.bit_reference
+left join fah.activities_bit abb on cb.cancel_bit_id = abb.bit_reference
+where ab.status='SUCCESS'
+group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
+),
+event_bits as (
+select 
+ab.member_id,
+json_extract_path_text(ab.header,'h_original_bit_amount') as h_original_bit_amount,
+json_extract_path_text(ab.header,'H_cashier_name') as H_cashier_name,
+json_extract_path_text(ab.header,'H_POS_CashierID') as H_POS_CashierID,
+json_extract_path_text(ab.header,'h_representative_id') as h_representative_id,
+ab.bit_reference,
+json_extract_path_text(ab.header,'cancel_bit_id') as cancel_bit_id,
+ea.Eligible_amount,
+json_extract_path_text(ssl.extra_data,'antum_location_id') as antum_location_id,
+ab.h_bit_date at time zone 'Asia/RIYADH' as transaction_date,
+json_extract_path_text(ab.header, 'h_bit_source_generated_id') as transaction_id,
+json_extract_path_text(ab.header, 'h_bit_type') as bit_type,
+oa.offer_id,
+ab.payment_details,
+ss.id as sponsor_id,
+ssl.id as location_id,
+ssl.location_code,
+ssl.destination,
+ss.name as sponsor_name,
+ssl.location_name,
+ss.business_division,
+json_extract_path_text(ss.extra_data,'antum_brand_id') as brand_id,
+ssl.address,
+ab.amount as sales,
+oa.type,trim('[]' from oa.reward_tags) as reward_tag,
+abb.bit_reference as original_bit_reference,
+abb.amount as original_bit_amount,
+json_extract_path_text(abb.header, 'h_bit_type') as bit_type_return_part2,
+json_extract_path_text(ab.header,'h_bit_source_original_generated_id') as h_bit_source_original_generated_id,
+'NULL' AS bit_type_return,
+of.offer_name,
+coalesce(ssl.destination,rmr.destination) as Mall_name,
+sum(oa.value_n) as points
+from fah.activities_bit ab
+join (select activity_id,offer_id,rule_id,subject_name,type,reward_tags,sum(value_n) as value_n 
+      from fah.offer_action
+      where subject_name ='1' 
+      and TYPE='REWARD_POINTS' and value_n >0
+      group by 1,2,3,4,5,6) oa on ab.id=oa.activity_id 
+      and json_extract_path_text(ab.header, 'h_bit_type') in ('EVENT') 
+left join fah.sponsors_sponsor ss on ab.h_sponsor_id=ss.id
+left join (select bit_reference,destination from fah.receipts_memberreceipt group by 1,2) rmr on rmr.bit_reference=ab.bit_reference
+left join eligible_amount ea on ab.bit_reference=ea.bit_reference
+left join fah.sponsors_sponsorlocation ssl on ab.h_location=ssl.location_code
+left join fah.offers_offer of on of.id=oa.offer_id
+left join cancelled_bits cb on ab.bit_reference = cb.bit_reference
+left join fah.activities_bit abb on cb.cancel_bit_id = abb.bit_reference
+where ab.status='SUCCESS'
+group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
+),
+joined_data as (
+select * from bit_type_data
+union
+select * from member_update
+union
+select * from event_bits
+),
+cancelled_deleted_members as (
+SELECT mm.member_id,
+ab.h_bit_date at TIME zone 'Asia/RIYADH' AS Date_Cancelled,
+ab2.h_bit_date at TIME zone 'Asia/RIYADH' AS Date_Deleted
+FROM fah.members_member mm
+left join fah.activities_bit ab on mm.member_id = ab.member_id and mm.membership_stage = 3 and json_extract_path_text (ab.header,'h_bit_type') = 'MEMBERSHIP_CANCELLATION'
+left join fah.activities_bit ab2 on mm.member_id = ab2.member_id and mm.membership_stage = 4 and json_extract_path_text (ab2.header,'h_bit_type') = 'MEMBERSHIP_DELETION'
+where mm.membership_stage in (3,4)
+)
+,
+MTA as(
+select bit_id ,value_s
+from fah.offer_action 
+where subject_name='Offer Applied' 
+GROUP BY 1,2
+)
+select a.*,
+mta.value_s as MTA_name,
+b.Date_Cancelled, 
+b.Date_Deleted,  
+mm.date_of_joining, 
+mm.tier_class,
+mm.member_type,
+mm.membership_stage, 
+pms.name as program_membershipstage_name 
+from joined_data a 
+left join fah.members_member mm on a.member_id = mm.member_id 
+left join cancelled_deleted_members b on  b.member_id=a.member_id
+left join fah.program_membershipstage pms on mm.membership_stage = pms.id
+left join mta on a.bit_reference=mta.bit_id
